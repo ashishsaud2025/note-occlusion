@@ -1,7 +1,7 @@
 {
   "id": "note-occlusion",
   "name": "Note Occlusion",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.4.0",
   "description": "Paint colored covers over any part of a note, then click to reveal. Each note remembers its own covers.",
   "author": "Star",
