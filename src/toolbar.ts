@@ -71,7 +71,7 @@ export class OcclusionToolbar {
 		});
 		for (const swatch of this.hooks.getSwatches()) {
 			const dot = colors.createDiv({ cls: "occ-swatch" });
-			dot.style.background = swatch;
+			dot.setCssStyles({ background: swatch });
 			dot.setAttribute("aria-label", swatch);
 			dot.addEventListener("click", () => {
 				this.hooks.setColor(swatch);
@@ -127,9 +127,11 @@ export class OcclusionToolbar {
 		if (!this.dragging) return;
 		const maxX = window.innerWidth - this.root.offsetWidth - 4;
 		const maxY = window.innerHeight - this.root.offsetHeight - 4;
-		this.root.style.left = `${clamp(event.clientX - this.offset.x, 4, maxX)}px`;
-		this.root.style.top = `${clamp(event.clientY - this.offset.y, 4, maxY)}px`;
-		this.root.style.right = "auto";
+		this.root.setCssStyles({
+			left: `${clamp(event.clientX - this.offset.x, 4, maxX)}px`,
+			top: `${clamp(event.clientY - this.offset.y, 4, maxY)}px`,
+			right: "auto",
+		});
 	};
 
 	private onDragEnd = (): void => {

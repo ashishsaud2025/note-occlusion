@@ -33,8 +33,8 @@
   cursor: pointer;
 }
 
-.occ-cover.occ-revealed {
-  background: transparent !important;
+.occ-layer .occ-cover.occ-revealed {
+  background: transparent;
   border-color: transparent;
 }
 

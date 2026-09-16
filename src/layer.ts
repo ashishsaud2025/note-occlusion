@@ -102,23 +102,17 @@ export class OcclusionLayer {
 		this.host = targets.host;
 		this.anchor = targets.anchor;
 
-		const layer = document.createElement("div");
-		layer.className = "occ-layer";
+		const layer = this.host.createDiv({ cls: "occ-layer" });
 		layer.setAttribute("contenteditable", "false");
 		layer.setAttribute("aria-hidden", "true");
-		this.host.appendChild(layer);
 		this.layerEl = layer;
 
-		const capture = document.createElement("div");
-		capture.className = "occ-capture";
-		capture.style.display = "none";
-		this.view.contentEl.appendChild(capture);
+		const capture = this.view.contentEl.createDiv({ cls: "occ-capture" });
+		capture.setCssStyles({ display: "none" });
 		this.captureEl = capture;
 
-		const preview = document.createElement("div");
-		preview.className = "occ-preview";
-		preview.style.display = "none";
-		layer.appendChild(preview);
+		const preview = layer.createDiv({ cls: "occ-preview" });
+		preview.setCssStyles({ display: "none" });
 		this.previewEl = preview;
 
 		capture.addEventListener("pointerdown", this.onPointerDown);
@@ -154,7 +148,8 @@ export class OcclusionLayer {
 
 	scheduleRender(): void {
 		if (this.frame) return;
-		this.frame = requestAnimationFrame(() => {
+		const win = this.view.contentEl.win ?? window;
+		this.frame = win.requestAnimationFrame(() => {
 			this.frame = 0;
 			this.render();
 		});
@@ -286,7 +281,7 @@ export class OcclusionLayer {
 
 		if (this.captureEl) {
 			const active = mode === "draw" || mode === "delete";
-			this.captureEl.style.display = active ? "block" : "none";
+			this.captureEl.setCssStyles({ display: active ? "block" : "none" });
 			this.captureEl.classList.toggle("occ-cursor-delete", mode === "delete");
 		}
 		this.layerEl.classList.toggle("occ-mode-draw", mode === "draw");
@@ -299,8 +294,7 @@ export class OcclusionLayer {
 			seen.add(cover.id);
 			let el = this.elements.get(cover.id);
 			if (!el) {
-				el = document.createElement("div");
-				el.className = "occ-cover";
+				el = this.layerEl.createDiv({ cls: "occ-cover" });
 				el.addEventListener("click", (e) => {
 					if (this.ctx.getMode() !== "reveal") return;
 					e.preventDefault();
@@ -311,23 +305,24 @@ export class OcclusionLayer {
 					if (this.ctx.getMode() === "pass") return;
 					e.preventDefault();
 					e.stopPropagation();
-					this.openMenu(e as MouseEvent, cover.id);
+					this.openMenu(e, cover.id);
 				});
-				this.layerEl.appendChild(el);
 				this.elements.set(cover.id, el);
 			}
 			const r = this.toPixels(cover);
-			el.style.left = `${offset.left + r.x}px`;
-			el.style.top = `${offset.top + r.y}px`;
-			el.style.width = `${r.w}px`;
-			el.style.height = `${r.h}px`;
-			el.style.background = cover.covered ? cover.color : "transparent";
-			el.style.opacity = cover.covered ? String(settings.coverOpacity) : "1";
+			el.setCssStyles({
+				left: `${offset.left + r.x}px`,
+				top: `${offset.top + r.y}px`,
+				width: `${r.w}px`,
+				height: `${r.h}px`,
+				background: cover.covered ? cover.color : "transparent",
+				opacity: cover.covered ? String(settings.coverOpacity) : "1",
+				pointerEvents: mode === "reveal" ? "auto" : "none",
+				borderColor: cover.color,
+			});
 			el.classList.toggle("occ-revealed", !cover.covered);
 			el.classList.toggle("occ-marked", !cover.covered && settings.markRevealed);
 			el.classList.toggle("occ-selected", mode === "draw" && cover.id === this.selectedId);
-			el.style.pointerEvents = mode === "reveal" ? "auto" : "none";
-			el.style.borderColor = cover.color;
 		}
 
 		for (const [id, el] of this.elements) {
@@ -354,11 +349,9 @@ export class OcclusionLayer {
 		}
 		if (this.handleEls.length === 0 && this.layerEl) {
 			for (const role of HANDLE_ROLES) {
-				const el = document.createElement("div");
-				el.className = "occ-handle";
+				const el = this.layerEl.createDiv({ cls: "occ-handle" });
 				el.dataset.role = role;
-				el.style.cursor = HANDLE_CURSORS[role];
-				this.layerEl.appendChild(el);
+				el.setCssStyles({ cursor: HANDLE_CURSORS[role] });
 				this.handleEls.push(el);
 			}
 		}
@@ -366,24 +359,28 @@ export class OcclusionLayer {
 		this.handleEls.forEach((el) => {
 			const role = el.dataset.role as HandleRole;
 			const [hx, hy] = handleAnchor(role, r.x, r.y, r.w, r.h);
-			el.style.left = `${offset.left + hx}px`;
-			el.style.top = `${offset.top + hy}px`;
+			el.setCssStyles({
+				left: `${offset.left + hx}px`,
+				top: `${offset.top + hy}px`,
+			});
 		});
 	}
 
 	private showPreview(rect: PixelRect | null): void {
 		if (!this.previewEl) return;
 		if (!rect) {
-			this.previewEl.style.display = "none";
+			this.previewEl.setCssStyles({ display: "none" });
 			return;
 		}
 		const offset = this.contentOffset();
-		this.previewEl.style.display = "block";
-		this.previewEl.style.left = `${offset.left + rect.x}px`;
-		this.previewEl.style.top = `${offset.top + rect.y}px`;
-		this.previewEl.style.width = `${rect.w}px`;
-		this.previewEl.style.height = `${rect.h}px`;
-		this.previewEl.style.background = this.ctx.getColor();
+		this.previewEl.setCssStyles({
+			display: "block",
+			left: `${offset.left + rect.x}px`,
+			top: `${offset.top + rect.y}px`,
+			width: `${rect.w}px`,
+			height: `${rect.h}px`,
+			background: this.ctx.getColor(),
+		});
 	}
 
 	private onPointerDown = (event: PointerEvent): void => {
@@ -417,11 +414,13 @@ export class OcclusionLayer {
 			if (this.ctx.getMode() === "draw" && this.captureEl) {
 				const point = this.pointAt(event);
 				const role = this.handleAt(point);
-				this.captureEl.style.cursor = role
-					? HANDLE_CURSORS[role]
-					: this.coverAt(point)
-					? "move"
-					: "crosshair";
+				this.captureEl.setCssStyles({
+					cursor: role
+						? HANDLE_CURSORS[role]
+						: this.coverAt(point)
+						? "move"
+						: "crosshair",
+				});
 			}
 			return;
 		}
