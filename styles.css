@@ -1,0 +1,197 @@
+/* Note Occlusion */
+
+.occ-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.occ-capture {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  cursor: crosshair;
+}
+
+.occ-capture.occ-cursor-delete {
+  cursor: context-menu;
+}
+
+.occ-cover {
+  position: absolute;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  transition: opacity 90ms ease;
+}
+
+.occ-mode-reveal .occ-cover {
+  cursor: pointer;
+}
+
+.occ-cover.occ-revealed {
+  background: transparent !important;
+  border-color: transparent;
+}
+
+.occ-cover.occ-marked {
+  border-style: dashed;
+  border-width: 1px;
+  opacity: 0.55;
+}
+
+.occ-cover.occ-selected {
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.occ-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--interactive-accent);
+  border: 1px solid var(--background-primary);
+  pointer-events: none;
+  z-index: 7;
+}
+
+.occ-preview {
+  position: absolute;
+  opacity: 0.45;
+  border: 1px dashed var(--interactive-accent);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.occ-toolbar {
+  position: fixed;
+  top: 64px;
+  right: 24px;
+  z-index: 60;
+  width: 300px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  font-size: var(--font-ui-smaller);
+}
+
+.occ-toolbar-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 8px 2px;
+  cursor: grab;
+  color: var(--text-muted);
+}
+
+.occ-toolbar-header:active {
+  cursor: grabbing;
+}
+
+.occ-title {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.occ-close {
+  cursor: pointer;
+  display: flex;
+}
+
+.occ-close:hover {
+  color: var(--text-normal);
+}
+
+.occ-status {
+  padding: 0 2px 8px 2px;
+  color: var(--text-accent);
+}
+
+.occ-status-dim {
+  color: var(--text-muted);
+}
+
+.occ-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.occ-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.occ-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.occ-btn.occ-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.occ-btn.occ-danger:hover {
+  border-color: var(--text-error);
+  color: var(--text-error);
+}
+
+.occ-btn .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.occ-colors {
+  align-items: center;
+}
+
+.occ-color {
+  width: 34px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.occ-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+
+.occ-swatch:hover {
+  transform: scale(1.12);
+}
+
+.occ-hint {
+  padding: 2px;
+  color: var(--text-faint);
+  line-height: 1.35;
+}
+
+.occ-statusbar {
+  cursor: pointer;
+}
