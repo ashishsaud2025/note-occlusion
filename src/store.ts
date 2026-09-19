@@ -167,13 +167,24 @@ function clone(covers: Cover[]): Cover[] {
 function isCover(value: unknown): value is Cover {
 	if (!value || typeof value !== "object") return false;
 	const c = value as Record<string, unknown>;
-	return (
+	const base =
 		typeof c.id === "string" &&
+		typeof c.color === "string" &&
+		typeof c.covered === "boolean";
+	if (!base) return false;
+	if (c.kind === "text") {
+		return (
+			typeof c.exact === "string" &&
+			c.exact.length > 0 &&
+			typeof c.prefix === "string" &&
+			typeof c.suffix === "string"
+		);
+	}
+	return (
+		(c.kind === undefined || c.kind === "rectangle") &&
 		typeof c.x === "number" &&
 		typeof c.y === "number" &&
 		typeof c.w === "number" &&
-		typeof c.h === "number" &&
-		typeof c.color === "string" &&
-		typeof c.covered === "boolean"
+		typeof c.h === "number"
 	);
 }

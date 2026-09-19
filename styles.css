@@ -29,6 +29,14 @@
   transition: opacity 90ms ease;
 }
 
+.occ-text-mode {
+  cursor: text;
+}
+
+.occ-cover.occ-text-cover {
+  border-radius: 2px;
+}
+
 .occ-mode-reveal .occ-cover {
   cursor: pointer;
 }
@@ -73,7 +81,8 @@
   top: 64px;
   right: 24px;
   z-index: 60;
-  width: 300px;
+  width: min(300px, calc(100vw - 16px));
+  box-sizing: border-box;
   padding: 8px;
   border-radius: 10px;
   background: var(--background-secondary);
@@ -123,6 +132,14 @@
   display: flex;
   gap: 6px;
   margin-bottom: 6px;
+}
+
+.occ-modes {
+  flex-wrap: wrap;
+}
+
+.occ-modes .occ-btn {
+  min-width: 80px;
 }
 
 .occ-btn {

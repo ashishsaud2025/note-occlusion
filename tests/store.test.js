@@ -3,6 +3,15 @@ const { OcclusionStore } = require('./store.cjs');
 const { Plugin, TFile, TFolder } = require('obsidian');
 
 const mk = (id) => ({ id, x: .1, y: 20, w: .3, h: 40, color: '#fff', covered: true });
+const textCover = (id) => ({
+  id,
+  kind: 'text',
+  exact: 'selected words',
+  prefix: 'before ',
+  suffix: ' after',
+  color: '#fff',
+  covered: true,
+});
 let pass = 0;
 const test = (name, fn) => { fn(); pass++; console.log('  ok -', name); };
 
@@ -84,6 +93,16 @@ const test = (name, fn) => { fn(); pass++; console.log('  ok -', name); };
     const s2 = new OcclusionStore(p2);
     await s2.load();
     assert.strictEqual(s2.count('real.md'), 1);
+  });
+
+  test('text-anchored covers survive a reload', async () => {
+    s.set('text.md', [textCover('text-1')]);
+    await s.forceSave();
+    const p2 = new Plugin();
+    p2._data = p._data;
+    const s2 = new OcclusionStore(p2);
+    await s2.load();
+    assert.deepStrictEqual(s2.covers('text.md'), [textCover('text-1')]);
   });
 
   test('malformed stored entries are discarded, valid ones kept', async () => {

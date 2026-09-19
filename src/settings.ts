@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
 import type NoteOcclusionPlugin from "./main";
-import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, Mode } from "./types";
+import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, MODE_TEXT, Mode } from "./types";
 
 type OcclusionControlKey =
 	| "defaultColor"
@@ -77,7 +77,7 @@ export class OcclusionSettingsTab extends PluginSettingTab {
 				name: "Mode when Obsidian starts",
 				desc:
 					"Reveal lets you click covers. Pass leaves the note fully editable. " +
-					"Draw takes over the mouse so you can paint.",
+					"Draw paints rectangles. Text hides selected words.",
 				control: {
 					type: "dropdown",
 					key: "startMode",
@@ -85,6 +85,7 @@ export class OcclusionSettingsTab extends PluginSettingTab {
 						[MODE_REVEAL]: "Reveal",
 						[MODE_PASS]: "Pass",
 						[MODE_DRAW]: "Draw",
+						[MODE_TEXT]: "Text",
 						[MODE_DELETE]: "Delete",
 					},
 				},

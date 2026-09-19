@@ -25,17 +25,18 @@ Copy `main.js`, `manifest.json`, and `styles.css` into:
 Then enable **Note Occlusion** in Settings, Community plugins. Restart Obsidian
 if it does not appear straight away.
 
-## Four modes
+## Five modes
 
 | Mode | What the mouse does |
 |---|---|
 | **Draw** | Drag on the note to paint a cover. Drag a cover to move it, drag a grip to resize, right-click for colour, bring-to-front, or delete. The note is not editable while this is on. |
+| **Text** | Select text to hide it. These covers are anchored to the selected words and are recalculated when you switch between Reading and editing modes. |
 | **Delete** | Right-click a cover to remove it immediately, no menu. This is the same delete action available from Draw mode's right-click menu, just one click instead of two. The note is not editable while this is on. |
 | **Reveal** | Click a cover to show what is under it. Click again to hide it. Everything else in the note works normally. |
 | **Pass** | Covers stay visible but ignore the mouse entirely, so you can select and edit text through them. |
 
 Switch modes from the toolbar, from the status bar item, or with the
-**Cycle mode** command. Escape leaves Draw or Delete mode back to Reveal.
+**Cycle mode** command. Escape leaves Draw, Text, or Delete mode back to Reveal.
 There are no default hotkeys, because single letters would be typed into your
 notes. Assign your own under Settings, Hotkeys, searching for "Occlusion".
 
@@ -45,7 +46,7 @@ other change, so **Undo** brings back a cover removed by accident.
 ## Getting started
 
 1. Open a note and click the ribbon icon to show the toolbar.
-2. Switch to **Draw** and drag a box over the text you want to hide.
+2. Switch to **Text** and select the words you want to hide, or use **Draw** for a free-form box.
 3. Switch to **Reveal** and click it. That is your flashcard.
 4. Close the note, reopen it, restart Obsidian: the covers are still there.
 
@@ -81,13 +82,13 @@ Consequences worth knowing:
 
 ## How positions are anchored
 
-A cover's horizontal position and width are stored as a fraction of the note's
-content width, and its vertical position in pixels from the top of the content.
+A drawn cover's horizontal position and width are stored as a fraction of the
+note's content width, and its vertical position in pixels from the top of the content.
 
 That means covers hold their place when you resize the pane or the window,
 change the reading width, or scroll.
 
-It does **not** mean covers survive switching between Reading mode and Live
+It does **not** mean drawn covers survive switching between Reading mode and Live
 Preview / Source mode. Obsidian renders the same note through two different
 engines for those - CodeMirror for editing, the markdown renderer for reading -
 and they don't produce the same line heights, heading sizes, or block spacing
@@ -95,12 +96,13 @@ for identical text. A cover's vertical position is a fixed pixel distance from
 the top of whichever one is currently on screen, so a cover positioned in one
 mode is not guaranteed to land over the same content in the other.
 
-**For covers that stay put, draw and study in Reading mode.** It's also the
-mode most people actually study in, so this isn't much of a constraint in
-practice. If a cover drifts after a mode switch, drag it back into place - the
-grips make that quick, and Undo is there if you overshoot.
+Text covers avoid this problem: they store the selected text and nearby context,
+then find those words again in the current renderer. Use **Text** mode when a
+cover must follow content between Reading and editing modes. If the selected
+words themselves are edited or deleted, that text cover cannot be located until
+the original words exist again.
 
-It also means a cover is anchored to a **position**, not to the words under it.
+Drawn covers are anchored to a **position**, not to the words under them.
 If you add or remove text above a cover, the text moves and the cover does not.
 For a note you are actively writing, cover it after the text settles. Dragging a
 cover back into place takes a second, and Undo is available if you overshoot.

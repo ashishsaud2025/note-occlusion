@@ -1,9 +1,9 @@
 {
   "id": "note-occlusion",
   "name": "Note Occlusion",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "minAppVersion": "1.13.0",
-  "description": "Paint colored covers over any part of a note, then click to reveal. Each note remembers its own covers.",
+  "description": "Draw covers or hide selected text, then click to reveal. Text covers follow words between reading and editing modes.",
   "author": "Star",
   "isDesktopOnly": false
 }

@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, Mode } from "./types";
+import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, MODE_TEXT, Mode } from "./types";
 
 export interface ToolbarHooks {
 	getMode(): Mode;
@@ -45,9 +45,10 @@ export class OcclusionToolbar {
 
 		this.statusEl = this.root.createDiv({ cls: "occ-status" });
 
-		const modes = this.root.createDiv({ cls: "occ-row" });
+		const modes = this.root.createDiv({ cls: "occ-row occ-modes" });
 		const modeSpec: Array<[Mode, string, string, string]> = [
 			[MODE_DRAW, "Draw", "pencil", "Drag on the note to paint a cover"],
+			[MODE_TEXT, "Text", "text-select", "Select text in the note to hide it"],
 			[MODE_DELETE, "Delete", "trash-2", "Right-click a cover to remove it"],
 			[MODE_REVEAL, "Reveal", "eye", "Click a cover to show what is under it"],
 			[MODE_PASS, "Pass", "mouse-pointer", "Covers stay visible, the note works normally"],
@@ -107,8 +108,9 @@ export class OcclusionToolbar {
 		this.root.createDiv({
 			cls: "occ-hint",
 			text:
-				"Draw: drag to paint, drag a cover to move it, grips to resize, " +
-				"right-click for colour and delete. Delete: right-click a cover to " +
+				"Draw: drag to paint, drag a cover to move it, grips to resize. " +
+				"Text: select words to create a cover that follows the text. " +
+				"Right-click for colour and delete. Delete: right-click a cover to " +
 				"remove it immediately. Reveal: click a cover.",
 		});
 	}

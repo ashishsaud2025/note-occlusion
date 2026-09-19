@@ -8,8 +8,11 @@ import {
 	MIN_SIZE,
 	Mode,
 	OcclusionSettings,
+	RectangleCover,
+	TextCover,
 	applyRoleResize,
 	handleAnchor,
+	isTextCover,
 	randomId,
 } from "./types";
 
@@ -58,18 +61,20 @@ export class OcclusionLayer {
 	private captureEl: HTMLElement | null = null;
 	private previewEl: HTMLElement | null = null;
 
-	private elements = new Map<string, HTMLElement>();
+	private elements = new Map<string, HTMLElement[]>();
 	private handleEls: HTMLElement[] = [];
 	private selectedId: string | null = null;
 	private drag: Drag | null = null;
 	private dragOrigin: Cover[] | null = null;
 	private observer: ResizeObserver | null = null;
+	private mutationObserver: MutationObserver | null = null;
 	private frame = 0;
 
 	constructor(view: MarkdownView, ctx: LayerContext) {
 		this.view = view;
 		this.ctx = ctx;
 		this.observer = new ResizeObserver(() => this.scheduleRender());
+		this.mutationObserver = new MutationObserver(() => this.scheduleRender());
 	}
 
 	get path(): string | null {
@@ -121,15 +126,24 @@ export class OcclusionLayer {
 		capture.addEventListener("pointercancel", this.onPointerUp);
 		capture.addEventListener("contextmenu", this.onContextMenu);
 		capture.addEventListener("dblclick", this.onDoubleClick);
+		this.anchor.addEventListener("pointerup", this.onTextSelection);
 
 		this.observer?.observe(this.anchor);
 		this.observer?.observe(this.host);
+		this.mutationObserver?.observe(this.anchor, {
+			childList: true,
+			characterData: true,
+			subtree: true,
+		});
 		this.render();
 		return true;
 	}
 
 	private detachDom(): void {
 		this.observer?.disconnect();
+		this.mutationObserver?.disconnect();
+		this.anchor?.removeEventListener("pointerup", this.onTextSelection);
+		this.anchor?.classList.remove("occ-text-mode");
 		this.captureEl?.remove();
 		this.layerEl?.remove();
 		this.elements.clear();
@@ -142,6 +156,7 @@ export class OcclusionLayer {
 	destroy(): void {
 		this.detachDom();
 		this.observer = null;
+		this.mutationObserver = null;
 		this.host = null;
 		this.anchor = null;
 	}
@@ -170,12 +185,12 @@ export class OcclusionLayer {
 		};
 	}
 
-	private toPixels(cover: Cover): PixelRect {
+	private toPixels(cover: RectangleCover): PixelRect {
 		const width = this.anchorWidth();
 		return { x: cover.x * width, y: cover.y, w: cover.w * width, h: cover.h };
 	}
 
-	private fromPixels(rect: PixelRect): Pick<Cover, "x" | "y" | "w" | "h"> {
+	private fromPixels(rect: PixelRect): Pick<RectangleCover, "x" | "y" | "w" | "h"> {
 		const width = this.anchorWidth();
 		return { x: rect.x / width, y: rect.y, w: rect.w / width, h: rect.h };
 	}
@@ -187,17 +202,20 @@ export class OcclusionLayer {
 		return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 	}
 
-	private coverAt(point: { x: number; y: number }): Cover | null {
+	private coverAt(point: { x: number; y: number }, includeText = true): Cover | null {
 		const covers = this.covers();
 		for (let i = covers.length - 1; i >= 0; i -= 1) {
-			const r = this.toPixels(covers[i]);
-			if (
-				point.x >= r.x &&
-				point.x <= r.x + r.w &&
-				point.y >= r.y &&
-				point.y <= r.y + r.h
-			) {
-				return covers[i];
+			const cover = covers[i];
+			if (!includeText && isTextCover(cover)) continue;
+			for (const r of this.rectsFor(cover)) {
+				if (
+					point.x >= r.x &&
+					point.x <= r.x + r.w &&
+					point.y >= r.y &&
+					point.y <= r.y + r.h
+				) {
+					return cover;
+				}
 			}
 		}
 		return null;
@@ -205,7 +223,7 @@ export class OcclusionLayer {
 
 	private handleAt(point: { x: number; y: number }): HandleRole | null {
 		const cover = this.covers().find((c) => c.id === this.selectedId);
-		if (!cover) return null;
+		if (!cover || isTextCover(cover)) return null;
 		const r = this.toPixels(cover);
 		for (const role of HANDLE_ROLES) {
 			const [hx, hy] = handleAnchor(role, r.x, r.y, r.w, r.h);
@@ -226,6 +244,52 @@ export class OcclusionLayer {
 		return path ? this.ctx.getCovers(path) : [];
 	}
 
+	private rectsFor(cover: Cover): PixelRect[] {
+		if (!isTextCover(cover)) return [this.toPixels(cover)];
+		const range = this.findTextRange(cover);
+		if (!range || !this.anchor) return [];
+		const anchorRect = this.anchor.getBoundingClientRect();
+		return Array.from(range.getClientRects())
+			.filter((rect) => rect.width > 0 && rect.height > 0)
+			.map((rect) => ({
+				x: rect.left - anchorRect.left,
+				y: rect.top - anchorRect.top,
+				w: rect.width,
+				h: rect.height,
+			}));
+	}
+
+	private findTextRange(cover: TextCover): Range | null {
+		if (!this.anchor) return null;
+		const nodes: Text[] = [];
+		const walker = this.anchor.ownerDocument.createTreeWalker(this.anchor, NodeFilter.SHOW_TEXT);
+		let node = walker.nextNode();
+		while (node) {
+			nodes.push(node as Text);
+			node = walker.nextNode();
+		}
+		const full = nodes.map((text) => text.data).join("");
+		let best = -1;
+		let bestScore = -1;
+		for (let at = full.indexOf(cover.exact); at >= 0; at = full.indexOf(cover.exact, at + 1)) {
+			const before = full.slice(Math.max(0, at - cover.prefix.length), at);
+			const after = full.slice(at + cover.exact.length, at + cover.exact.length + cover.suffix.length);
+			const score = matchingSuffix(before, cover.prefix) + matchingPrefix(after, cover.suffix);
+			if (score > bestScore) {
+				best = at;
+				bestScore = score;
+			}
+		}
+		if (best < 0) return null;
+		const start = textPosition(nodes, best);
+		const end = textPosition(nodes, best + cover.exact.length);
+		if (!start || !end) return null;
+		const range = this.anchor.ownerDocument.createRange();
+		range.setStart(start.node, start.offset);
+		range.setEnd(end.node, end.offset);
+		return range;
+	}
+
 	private commit(covers: Cover[], remember = true): void {
 		const path = this.path;
 		if (!path) return;
@@ -234,7 +298,11 @@ export class OcclusionLayer {
 		this.ctx.onChanged();
 	}
 
-	private replace(id: string, patch: Partial<Cover>, remember = true): void {
+	private replace(
+		id: string,
+		patch: Partial<Pick<RectangleCover, "x" | "y" | "w" | "h" | "color" | "covered">>,
+		remember = true
+	): void {
 		this.commit(
 			this.covers().map((c) => (c.id === id ? { ...c, ...patch } : c)),
 			remember
@@ -284,7 +352,9 @@ export class OcclusionLayer {
 			this.captureEl.setCssStyles({ display: active ? "block" : "none" });
 			this.captureEl.classList.toggle("occ-cursor-delete", mode === "delete");
 		}
+		this.anchor.classList.toggle("occ-text-mode", mode === "text");
 		this.layerEl.classList.toggle("occ-mode-draw", mode === "draw");
+		this.layerEl.classList.toggle("occ-mode-text", mode === "text");
 		this.layerEl.classList.toggle("occ-mode-delete", mode === "delete");
 		this.layerEl.classList.toggle("occ-mode-reveal", mode === "reveal");
 		this.layerEl.classList.toggle("occ-mode-pass", mode === "pass");
@@ -292,42 +362,30 @@ export class OcclusionLayer {
 		const seen = new Set<string>();
 		for (const cover of covers) {
 			seen.add(cover.id);
-			let el = this.elements.get(cover.id);
-			if (!el) {
-				el = this.layerEl.createDiv({ cls: "occ-cover" });
-				el.addEventListener("click", (e) => {
-					if (this.ctx.getMode() !== "reveal") return;
-					e.preventDefault();
-					e.stopPropagation();
-					this.toggle(cover.id);
+			const rects = this.rectsFor(cover);
+			const els = this.coverElements(cover.id, rects.length);
+			els.forEach((el, index) => {
+				const r = rects[index];
+				el.setCssStyles({
+					left: `${offset.left + r.x}px`,
+					top: `${offset.top + r.y}px`,
+					width: `${r.w}px`,
+					height: `${r.h}px`,
+					background: cover.covered ? cover.color : "transparent",
+					opacity: cover.covered ? String(settings.coverOpacity) : "1",
+					pointerEvents: mode === "reveal" ? "auto" : "none",
+					borderColor: cover.color,
 				});
-				el.addEventListener("contextmenu", (e) => {
-					if (this.ctx.getMode() === "pass") return;
-					e.preventDefault();
-					e.stopPropagation();
-					this.openMenu(e, cover.id);
-				});
-				this.elements.set(cover.id, el);
-			}
-			const r = this.toPixels(cover);
-			el.setCssStyles({
-				left: `${offset.left + r.x}px`,
-				top: `${offset.top + r.y}px`,
-				width: `${r.w}px`,
-				height: `${r.h}px`,
-				background: cover.covered ? cover.color : "transparent",
-				opacity: cover.covered ? String(settings.coverOpacity) : "1",
-				pointerEvents: mode === "reveal" ? "auto" : "none",
-				borderColor: cover.color,
+				el.classList.toggle("occ-text-cover", isTextCover(cover));
+				el.classList.toggle("occ-revealed", !cover.covered);
+				el.classList.toggle("occ-marked", !cover.covered && settings.markRevealed);
+				el.classList.toggle("occ-selected", mode === "draw" && cover.id === this.selectedId);
 			});
-			el.classList.toggle("occ-revealed", !cover.covered);
-			el.classList.toggle("occ-marked", !cover.covered && settings.markRevealed);
-			el.classList.toggle("occ-selected", mode === "draw" && cover.id === this.selectedId);
 		}
 
-		for (const [id, el] of this.elements) {
+		for (const [id, els] of this.elements) {
 			if (!seen.has(id)) {
-				el.remove();
+				els.forEach((el) => el.remove());
 				this.elements.delete(id);
 			}
 		}
@@ -336,13 +394,37 @@ export class OcclusionLayer {
 		this.renderHandles(offset);
 	}
 
+	private coverElements(id: string, count: number): HTMLElement[] {
+		if (!this.layerEl) return [];
+		const els = this.elements.get(id) ?? [];
+		while (els.length < count) {
+			const el = this.layerEl.createDiv({ cls: "occ-cover" });
+			el.addEventListener("click", (event) => {
+				if (this.ctx.getMode() !== "reveal") return;
+				event.preventDefault();
+				event.stopPropagation();
+				this.toggle(id);
+			});
+			el.addEventListener("contextmenu", (event) => {
+				if (this.ctx.getMode() === "pass") return;
+				event.preventDefault();
+				event.stopPropagation();
+				this.openMenu(event, id);
+			});
+			els.push(el);
+		}
+		while (els.length > count) els.pop()?.remove();
+		this.elements.set(id, els);
+		return els;
+	}
+
 	private renderHandles(offset: { left: number; top: number }): void {
 		const wanted =
 			this.ctx.getMode() === "draw" && this.selectedId
 				? this.covers().find((c) => c.id === this.selectedId) ?? null
 				: null;
 
-		if (!wanted) {
+		if (!wanted || isTextCover(wanted)) {
 			this.handleEls.forEach((el) => el.remove());
 			this.handleEls = [];
 			return;
@@ -383,6 +465,34 @@ export class OcclusionLayer {
 		});
 	}
 
+	private onTextSelection = (event: PointerEvent): void => {
+		if (event.button !== 0 || this.ctx.getMode() !== "text" || !this.anchor) return;
+		const selection = this.anchor.ownerDocument.getSelection();
+		if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+		const range = selection.getRangeAt(0);
+		if (!this.anchor.contains(range.startContainer) || !this.anchor.contains(range.endContainer)) return;
+		const exact = range.toString();
+		if (!exact.trim()) return;
+
+		const before = range.cloneRange();
+		before.selectNodeContents(this.anchor);
+		before.setEnd(range.startContainer, range.startOffset);
+		const after = range.cloneRange();
+		after.selectNodeContents(this.anchor);
+		after.setStart(range.endContainer, range.endOffset);
+		const cover: TextCover = {
+			id: randomId(),
+			kind: "text",
+			exact,
+			prefix: before.toString().slice(-48),
+			suffix: after.toString().slice(0, 48),
+			color: this.ctx.getColor(),
+			covered: true,
+		};
+		this.commit([...this.covers(), cover]);
+		selection.removeAllRanges();
+	};
+
 	private onPointerDown = (event: PointerEvent): void => {
 		if (event.button !== 0 || this.ctx.getMode() !== "draw") return;
 		const point = this.pointAt(event);
@@ -392,13 +502,13 @@ export class OcclusionLayer {
 		const role = this.handleAt(point);
 		if (role && this.selectedId) {
 			const cover = this.covers().find((c) => c.id === this.selectedId);
-			if (cover) {
+			if (cover && !isTextCover(cover)) {
 				this.drag = { kind: "resize", id: cover.id, role, from: point, orig: this.toPixels(cover) };
 				return;
 			}
 		}
-		const hit = this.coverAt(point);
-		if (hit) {
+		const hit = this.coverAt(point, false);
+		if (hit && !isTextCover(hit)) {
 			this.selectedId = hit.id;
 			this.drag = { kind: "move", id: hit.id, from: point, orig: this.toPixels(hit) };
 			this.render();
@@ -417,7 +527,7 @@ export class OcclusionLayer {
 				this.captureEl.setCssStyles({
 					cursor: role
 						? HANDLE_CURSORS[role]
-						: this.coverAt(point)
+						: this.coverAt(point, false)
 						? "move"
 						: "crosshair",
 				});
@@ -481,7 +591,7 @@ export class OcclusionLayer {
 	private movedFrom(drag: Drag): boolean {
 		if (drag.kind === "new") return false;
 		const current = this.covers().find((c) => c.id === drag.id);
-		if (!current) return false;
+		if (!current || isTextCover(current)) return false;
 		const now = this.toPixels(current);
 		const o = drag.orig;
 		return (
@@ -494,7 +604,7 @@ export class OcclusionLayer {
 
 	private onDoubleClick = (event: MouseEvent): void => {
 		if (this.ctx.getMode() !== "draw") return;
-		const hit = this.coverAt(this.pointAt(event));
+		const hit = this.coverAt(this.pointAt(event), false);
 		if (hit) {
 			event.preventDefault();
 			this.toggle(hit.id);
@@ -510,7 +620,7 @@ export class OcclusionLayer {
 			return;
 		}
 		if (mode !== "draw") return;
-		const hit = this.coverAt(this.pointAt(event));
+		const hit = this.coverAt(this.pointAt(event), false);
 		event.preventDefault();
 		if (hit) this.openMenu(event, hit.id);
 	};
@@ -577,4 +687,27 @@ function normalise(a: { x: number; y: number }, b: { x: number; y: number }): Pi
 		w: Math.abs(b.x - a.x),
 		h: Math.abs(b.y - a.y),
 	};
+}
+
+function textPosition(nodes: Text[], index: number): { node: Text; offset: number } | null {
+	let remaining = index;
+	for (const node of nodes) {
+		if (remaining <= node.data.length) return { node, offset: remaining };
+		remaining -= node.data.length;
+	}
+	return null;
+}
+
+function matchingPrefix(a: string, b: string): number {
+	const limit = Math.min(a.length, b.length);
+	let count = 0;
+	while (count < limit && a[count] === b[count]) count += 1;
+	return count;
+}
+
+function matchingSuffix(a: string, b: string): number {
+	const limit = Math.min(a.length, b.length);
+	let count = 0;
+	while (count < limit && a[a.length - 1 - count] === b[b.length - 1 - count]) count += 1;
+	return count;
 }

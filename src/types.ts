@@ -1,6 +1,7 @@
-export type Mode = "draw" | "delete" | "reveal" | "pass";
+export type Mode = "draw" | "text" | "delete" | "reveal" | "pass";
 
 export const MODE_DRAW: Mode = "draw";
+export const MODE_TEXT: Mode = "text";
 export const MODE_DELETE: Mode = "delete";
 export const MODE_REVEAL: Mode = "reveal";
 export const MODE_PASS: Mode = "pass";
@@ -13,14 +14,32 @@ export const MODE_PASS: Mode = "pass";
  * pixels from the top of the note's content, which is stable while the text
  * above them does not change length.
  */
-export interface Cover {
+interface CoverBase {
 	id: string;
+	color: string;
+	covered: boolean;
+}
+
+export interface RectangleCover extends CoverBase {
+	kind?: "rectangle";
 	x: number;
 	y: number;
 	w: number;
 	h: number;
-	color: string;
-	covered: boolean;
+}
+
+/** A quote that is located again in whichever renderer is currently visible. */
+export interface TextCover extends CoverBase {
+	kind: "text";
+	exact: string;
+	prefix: string;
+	suffix: string;
+}
+
+export type Cover = RectangleCover | TextCover;
+
+export function isTextCover(cover: Cover): cover is TextCover {
+	return cover.kind === "text";
 }
 
 export interface OcclusionSettings {

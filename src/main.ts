@@ -3,7 +3,15 @@ import { LayerContext, OcclusionLayer } from "./layer";
 import { OcclusionSettingsTab } from "./settings";
 import { OcclusionStore } from "./store";
 import { OcclusionToolbar } from "./toolbar";
-import { Cover, MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, Mode } from "./types";
+import {
+	Cover,
+	MODE_DELETE,
+	MODE_DRAW,
+	MODE_PASS,
+	MODE_REVEAL,
+	MODE_TEXT,
+	Mode,
+} from "./types";
 
 export default class NoteOcclusionPlugin extends Plugin {
 	store!: OcclusionStore;
@@ -41,7 +49,7 @@ export default class NoteOcclusionPlugin extends Plugin {
 		);
 		this.registerDomEvent(document, "keydown", (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
-			if (this.mode !== MODE_DRAW && this.mode !== MODE_DELETE) return;
+			if (this.mode !== MODE_DRAW && this.mode !== MODE_TEXT && this.mode !== MODE_DELETE) return;
 			const layer = this.activeLayer();
 			layer?.cancelDrag();
 			this.setMode(MODE_REVEAL);
@@ -69,11 +77,12 @@ export default class NoteOcclusionPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "cycle-mode",
-			name: "Cycle mode (draw, reveal, pass)",
+			name: "Cycle occlusion mode",
 			callback: () => this.cycleMode(),
 		});
 		const modes: Array<[Mode, string]> = [
 			[MODE_DRAW, "Draw mode: paint covers"],
+			[MODE_TEXT, "Text mode: select text to hide it"],
 			[MODE_DELETE, "Delete mode: right-click a cover to remove it"],
 			[MODE_REVEAL, "Reveal mode: click covers"],
 			[MODE_PASS, "Pass mode: leave the note alone"],
@@ -200,7 +209,7 @@ export default class NoteOcclusionPlugin extends Plugin {
 	}
 
 	cycleMode(): void {
-		const order: Mode[] = [MODE_REVEAL, MODE_DRAW, MODE_DELETE, MODE_PASS];
+		const order: Mode[] = [MODE_REVEAL, MODE_DRAW, MODE_TEXT, MODE_DELETE, MODE_PASS];
 		const next = order[(order.indexOf(this.mode) + 1) % order.length];
 		this.setMode(next);
 	}
