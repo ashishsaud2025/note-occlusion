@@ -1,12 +1,12 @@
 {
   "name": "note-occlusion",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Occlusion overlays for Obsidian notes",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "esbuild tests/store-entry.ts --bundle --format=cjs --alias:obsidian=./tests/obsidian.mock.js --outfile=tests/store.cjs --log-level=error && node tests/store.test.js"
+    "test": "esbuild tests/store-entry.ts --bundle --format=cjs --alias:obsidian=./tests/obsidian.mock.js --outfile=tests/store.cjs --log-level=error && esbuild tests/text-anchor-entry.ts --bundle --format=cjs --outfile=tests/text-anchor.cjs --log-level=error && node tests/store.test.js && node tests/text-anchor.test.js"
   },
   "keywords": [],
   "author": "Star",

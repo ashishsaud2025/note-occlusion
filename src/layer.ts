@@ -18,6 +18,11 @@ import {
 	isTextCover,
 	randomId,
 } from "./types";
+import {
+	TEXT_CONTEXT_LENGTH,
+	collapseWhitespace,
+	pickTextCandidate,
+} from "./text-anchor";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -311,36 +316,85 @@ export class OcclusionLayer {
 
 	private findTextRange(cover: TextCover): Range | null {
 		if (!this.anchor) return null;
+		const { nodes, full } = this.anchorText();
+		// Demand a confident, unique match: with CodeMirror unmounting
+		// off-screen lines, the true occurrence can be absent while a
+		// duplicate is visible. Guessing then paints the wrong words.
+		const hit = pickTextCandidate(full, cover.exact, cover.prefix, cover.suffix);
+		if (!hit) return null;
+		// Never paint a range broader than the quote this cover represents.
+		if (collapseWhitespace(full.slice(hit.start, hit.end)) !== collapseWhitespace(cover.exact)) {
+			return null;
+		}
+		const start = textPosition(nodes, hit.start, "start");
+		const end = textPosition(nodes, hit.end, "end");
+		if (!start || !end) return null;
+		const range = this.anchor.ownerDocument.createRange();
+		range.setStart(start.node, start.offset);
+		range.setEnd(end.node, end.offset);
+		return range;
+	}
+
+	/** Text nodes and their joined text, the same model capture uses. */
+	private anchorText(): { nodes: Text[]; full: string } {
 		const nodes: Text[] = [];
+		if (!this.anchor) return { nodes, full: "" };
 		const walker = this.anchor.ownerDocument.createTreeWalker(this.anchor, NodeFilter.SHOW_TEXT);
 		let node = walker.nextNode();
 		while (node) {
 			nodes.push(node as Text);
 			node = walker.nextNode();
 		}
-		const full = nodes.map((text) => text.data).join("");
-		let best = -1;
-		let bestScore = -1;
-		for (let at = full.indexOf(cover.exact); at >= 0; at = full.indexOf(cover.exact, at + 1)) {
-			const before = full.slice(Math.max(0, at - cover.prefix.length), at);
-			const after = full.slice(at + cover.exact.length, at + cover.exact.length + cover.suffix.length);
-			const score = matchingSuffix(before, cover.prefix) + matchingPrefix(after, cover.suffix);
-			if (score > bestScore) {
-				best = at;
-				bestScore = score;
+		return { nodes, full: nodes.map((text) => text.data).join("") };
+	}
+
+	private selectionOffsets(nodes: Text[], range: Range): { start: number; end: number } | null {
+		const start = this.globalOffsetFor(nodes, range.startContainer, range.startOffset);
+		const end = this.globalOffsetFor(nodes, range.endContainer, range.endOffset);
+		if (start == null || end == null || end < start) return null;
+		return { start, end };
+	}
+
+	/**
+	 * Global text offset of a DOM boundary point. Element boundaries fall
+	 * between text nodes, so every node starting before the point lies
+	 * fully inside it; a null means the point is outside this model.
+	 */
+	private globalOffsetFor(nodes: Text[], container: Node, offset: number): number | null {
+		if (container.nodeType === Node.TEXT_NODE) {
+			let acc = 0;
+			for (const node of nodes) {
+				if (node === container) {
+					if (offset < 0 || offset > node.data.length) return null;
+					return acc + offset;
+				}
+				acc += node.data.length;
 			}
+			return null;
 		}
-		if (best < 0) return null;
-		const start = textPosition(nodes, best, "start");
-		const end = textPosition(nodes, best + cover.exact.length, "end");
-		if (!start || !end) return null;
-		const range = this.anchor.ownerDocument.createRange();
-		range.setStart(start.node, start.offset);
-		range.setEnd(end.node, end.offset);
-		// DOM boundaries between blocks can add content that textContent omits.
-		// Never paint a range broader than the quote this cover represents.
-		if (range.toString() !== cover.exact) return null;
-		return range;
+		if (container.nodeType !== Node.ELEMENT_NODE) return null;
+		const doc = this.anchor?.ownerDocument;
+		if (!doc) return null;
+		let point: Range;
+		try {
+			point = doc.createRange();
+			point.setStart(container, offset);
+			point.collapse(true);
+		} catch {
+			return null;
+		}
+		let acc = 0;
+		for (const node of nodes) {
+			let cmp: number;
+			try {
+				cmp = point.comparePoint(node, 0);
+			} catch {
+				return null;
+			}
+			if (cmp !== -1) break;
+			acc += node.data.length;
+		}
+		return acc;
 	}
 
 	private commit(covers: Cover[], remember = true): void {
@@ -609,21 +663,20 @@ export class OcclusionLayer {
 		if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
 		const range = selection.getRangeAt(0);
 		if (!this.anchor.contains(range.startContainer) || !this.anchor.contains(range.endContainer)) return;
-		const exact = range.toString();
+		// Capture from the same joined-text model the lookup searches, so
+		// the stored quote always matches its own context exactly.
+		const { nodes, full } = this.anchorText();
+		const offsets = this.selectionOffsets(nodes, range);
+		if (!offsets) return;
+		const exact = full.slice(offsets.start, offsets.end);
 		if (!exact.trim()) return;
 
-		const before = range.cloneRange();
-		before.selectNodeContents(this.anchor);
-		before.setEnd(range.startContainer, range.startOffset);
-		const after = range.cloneRange();
-		after.selectNodeContents(this.anchor);
-		after.setStart(range.endContainer, range.endOffset);
 		const cover: TextCover = {
 			id: randomId(),
 			kind: "text",
 			exact,
-			prefix: before.toString().slice(-48),
-			suffix: after.toString().slice(0, 48),
+			prefix: full.slice(Math.max(0, offsets.start - TEXT_CONTEXT_LENGTH), offsets.start),
+			suffix: full.slice(offsets.end, offsets.end + TEXT_CONTEXT_LENGTH),
 			color: this.ctx.getColor(),
 			covered: true,
 		};
@@ -920,18 +973,4 @@ function textPosition(
 		remaining -= node.data.length;
 	}
 	return null;
-}
-
-function matchingPrefix(a: string, b: string): number {
-	const limit = Math.min(a.length, b.length);
-	let count = 0;
-	while (count < limit && a[count] === b[count]) count += 1;
-	return count;
-}
-
-function matchingSuffix(a: string, b: string): number {
-	const limit = Math.min(a.length, b.length);
-	let count = 0;
-	while (count < limit && a[a.length - 1 - count] === b[b.length - 1 - count]) count += 1;
-	return count;
 }

@@ -104,6 +104,13 @@ cover must follow content between Reading and editing modes. If the selected
 words themselves are edited or deleted, that text cover cannot be located until
 the original words exist again.
 
+A text cover needs a confident, unique match in the text currently on screen.
+In Live Preview / Source mode Obsidian unmounts lines far from the viewport,
+so a cover whose words are scrolled away stays hidden instead of jumping onto
+a different occurrence of the same word. Scroll back and it reappears. For the
+same reason, two identical passages may leave a cover hidden rather than risk
+covering the wrong one.
+
 Drawn covers are anchored to a **position**, not to the words under them.
 If you add or remove text above a cover, the text moves and the cover does not.
 For a note you are actively writing, cover it after the text settles. Dragging a
