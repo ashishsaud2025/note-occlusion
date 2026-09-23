@@ -22,6 +22,10 @@
   cursor: context-menu;
 }
 
+.occ-capture.occ-cursor-pen {
+  cursor: crosshair;
+}
+
 .occ-cover {
   position: absolute;
   border-radius: 3px;
@@ -134,6 +138,27 @@
   margin-bottom: 6px;
 }
 
+.occ-pen-cover,
+.occ-pen-preview {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.occ-pen-preview {
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0.65;
+}
+
+.occ-pen-preview path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .occ-modes {
   flex-wrap: wrap;
 }
@@ -179,6 +204,20 @@
 
 .occ-colors {
   align-items: center;
+}
+
+.occ-pen-size {
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.occ-pen-size span {
+  white-space: nowrap;
+}
+
+.occ-pen-size input {
+  min-width: 0;
+  flex: 1;
 }
 
 .occ-color {

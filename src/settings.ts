@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
 import type NoteOcclusionPlugin from "./main";
-import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, MODE_TEXT, Mode } from "./types";
+import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_PEN, MODE_REVEAL, MODE_TEXT, Mode } from "./types";
 
 type OcclusionControlKey =
 	| "defaultColor"
@@ -8,6 +8,7 @@ type OcclusionControlKey =
 	| "showToolbarOnStart"
 	| "markRevealed"
 	| "coverOpacity"
+	| "penWidth"
 	| "swatches";
 
 function parseSwatches(value: string): string[] {
@@ -52,6 +53,10 @@ export class OcclusionSettingsTab extends PluginSettingTab {
 				settings.coverOpacity = Number(value);
 				this.plugin.renderAll();
 				break;
+			case "penWidth":
+				settings.penWidth = Number(value);
+				this.plugin.setPenWidth(settings.penWidth);
+				break;
 			case "swatches": {
 				const parsed = parseSwatches(String(value));
 				if (parsed.length) settings.swatches = parsed;
@@ -77,7 +82,7 @@ export class OcclusionSettingsTab extends PluginSettingTab {
 				name: "Mode when Obsidian starts",
 				desc:
 					"Reveal lets you click covers. Pass leaves the note fully editable. " +
-					"Draw paints rectangles. Text hides selected words.",
+					"Draw paints rectangles. Pen paints freehand strokes. Text hides selected words.",
 				control: {
 					type: "dropdown",
 					key: "startMode",
@@ -85,9 +90,22 @@ export class OcclusionSettingsTab extends PluginSettingTab {
 						[MODE_REVEAL]: "Reveal",
 						[MODE_PASS]: "Pass",
 						[MODE_DRAW]: "Draw",
+						[MODE_PEN]: "Pen",
 						[MODE_TEXT]: "Text",
 						[MODE_DELETE]: "Delete",
 					},
+				},
+			},
+			{
+				name: "Pen width",
+				desc: "Width in pixels for new freehand covers.",
+				control: {
+					type: "slider",
+					key: "penWidth",
+					min: 4,
+					max: 80,
+					step: 2,
+					displayFormat: (value: number) => `${value}px`,
 				},
 			},
 			{

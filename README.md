@@ -25,18 +25,19 @@ Copy `main.js`, `manifest.json`, and `styles.css` into:
 Then enable **Note Occlusion** in Settings, Community plugins. Restart Obsidian
 if it does not appear straight away.
 
-## Five modes
+## Six modes
 
 | Mode | What the mouse does |
 |---|---|
 | **Draw** | Drag on the note to paint a cover. Drag a cover to move it, drag a grip to resize, right-click for colour, bring-to-front, or delete. The note is not editable while this is on. |
+| **Pen** | Drag to paint a freehand cover. Adjust the stroke width in the toolbar or settings. Each stroke can be revealed, recoloured, deleted, or undone as one cover. |
 | **Text** | Select text to hide it. These covers are anchored to the selected words and are recalculated when you switch between Reading and editing modes. |
 | **Delete** | Right-click a cover to remove it immediately, no menu. This is the same delete action available from Draw mode's right-click menu, just one click instead of two. The note is not editable while this is on. |
 | **Reveal** | Click a cover to show what is under it. Click again to hide it. Everything else in the note works normally. |
 | **Pass** | Covers stay visible but ignore the mouse entirely, so you can select and edit text through them. |
 
 Switch modes from the toolbar, from the status bar item, or with the
-**Cycle mode** command. Escape leaves Draw, Text, or Delete mode back to Reveal.
+**Cycle mode** command. Escape leaves Draw, Pen, Text, or Delete mode back to Reveal.
 There are no default hotkeys, because single letters would be typed into your
 notes. Assign your own under Settings, Hotkeys, searching for "Occlusion".
 
@@ -46,7 +47,7 @@ other change, so **Undo** brings back a cover removed by accident.
 ## Getting started
 
 1. Open a note and click the ribbon icon to show the toolbar.
-2. Switch to **Text** and select the words you want to hide, or use **Draw** for a free-form box.
+2. Switch to **Text** and select the words you want to hide, use **Draw** for a box, or **Pen** for a freehand cover.
 3. Switch to **Reveal** and click it. That is your flashcard.
 4. Close the note, reopen it, restart Obsidian: the covers are still there.
 
@@ -84,6 +85,7 @@ Consequences worth knowing:
 
 A drawn cover's horizontal position and width are stored as a fraction of the
 note's content width, and its vertical position in pixels from the top of the content.
+Pen points use the same proportional horizontal and fixed vertical coordinates.
 
 That means covers hold their place when you resize the pane or the window,
 change the reading width, or scroll.
@@ -111,6 +113,7 @@ cover back into place takes a second, and Undo is available if you overshoot.
 
 - Cover colour for new covers, plus the swatch list used by the toolbar and the
   right-click menu.
+- Pen width for new freehand covers.
 - Mode when Obsidian starts. **Reveal** is the default so the plugin never
   blocks typing unexpectedly.
 - Cover opacity. Below 1 the text shows through faintly, which is useful for

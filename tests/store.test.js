@@ -1,6 +1,5 @@
 const assert = require('assert');
-const { OcclusionStore } = require('./store.cjs');
-const { Plugin, TFile, TFolder } = require('obsidian');
+const { OcclusionStore, Plugin, TFile, TFolder } = require('./store.cjs');
 
 const mk = (id) => ({ id, x: .1, y: 20, w: .3, h: 40, color: '#fff', covered: true });
 const textCover = (id) => ({
@@ -12,8 +11,23 @@ const textCover = (id) => ({
   color: '#fff',
   covered: true,
 });
+const penCover = (id) => ({
+  id,
+  kind: 'pen',
+  points: [{ x: .1, y: 20 }, { x: .2, y: 30 }],
+  width: 24,
+  color: '#fff',
+  covered: true,
+});
 let pass = 0;
-const test = (name, fn) => { fn(); pass++; console.log('  ok -', name); };
+let chain = Promise.resolve();
+const test = (name, fn) => {
+  chain = chain.then(async () => {
+    await fn();
+    pass++;
+    console.log('  ok -', name);
+  });
+};
 
 (async () => {
   const p = new Plugin();
@@ -105,6 +119,39 @@ const test = (name, fn) => { fn(); pass++; console.log('  ok -', name); };
     assert.deepStrictEqual(s2.covers('text.md'), [textCover('text-1')]);
   });
 
+  test('pen covers survive reload and undo snapshots deep-copy their points', async () => {
+    const pen = penCover('pen-1');
+    s.set('pen.md', [pen]);
+    s.rememberState('pen.md', s.covers('pen.md'));
+    pen.points[0].x = .9;
+    assert.ok(s.undo('pen.md'));
+    assert.strictEqual(s.covers('pen.md')[0].points[0].x, .1);
+    await s.forceSave();
+    const p2 = new Plugin();
+    p2._data = p._data;
+    const s2 = new OcclusionStore(p2);
+    await s2.load();
+    assert.deepStrictEqual(s2.covers('pen.md'), [penCover('pen-1')]);
+  });
+
+  test('malformed pen covers are discarded', async () => {
+    const p4 = new Plugin();
+    p4._data = {
+      version: 1,
+      notes: {
+        'pen.md': [
+          penCover('ok-pen'),
+          { ...penCover('empty'), points: [] },
+          { ...penCover('wide'), width: 0 },
+          { ...penCover('bad-point'), points: [{ x: 'no', y: 2 }] },
+        ],
+      },
+    };
+    const s4 = new OcclusionStore(p4);
+    await s4.load();
+    assert.deepStrictEqual(s4.covers('pen.md'), [penCover('ok-pen')]);
+  });
+
   test('malformed stored entries are discarded, valid ones kept', async () => {
     const p3 = new Plugin();
     p3._data = { version: 1, notes: { 'x.md': [mk('ok'), { id: 'bad' }, null, 5] } };
@@ -113,5 +160,6 @@ const test = (name, fn) => { fn(); pass++; console.log('  ok -', name); };
     assert.strictEqual(s3.count('x.md'), 1);
   });
 
+  await chain;
   console.log(`\n${pass} store checks passed`);
 })();

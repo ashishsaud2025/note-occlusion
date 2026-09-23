@@ -8,17 +8,23 @@ import {
 	MIN_SIZE,
 	Mode,
 	OcclusionSettings,
+	PenCover,
 	RectangleCover,
 	TextCover,
 	applyRoleResize,
 	handleAnchor,
+	isPenCover,
+	isRectangleCover,
 	isTextCover,
 	randomId,
 } from "./types";
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 export interface LayerContext {
 	getMode(): Mode;
 	getColor(): string;
+	getPenWidth(): number;
 	getSettings(): OcclusionSettings;
 	getCovers(path: string): Cover[];
 	setCovers(path: string, covers: Cover[], remember?: boolean): void;
@@ -33,8 +39,14 @@ interface PixelRect {
 	h: number;
 }
 
+interface PenElements {
+	svg: SVGSVGElement;
+	path: SVGPathElement;
+}
+
 type Drag =
 	| { kind: "new"; from: { x: number; y: number }; to: { x: number; y: number } }
+	| { kind: "pen"; points: Array<{ x: number; y: number }> }
 	| { kind: "move"; id: string; from: { x: number; y: number }; orig: PixelRect }
 	| {
 			kind: "resize";
@@ -60,8 +72,11 @@ export class OcclusionLayer {
 	private layerEl: HTMLElement | null = null;
 	private captureEl: HTMLElement | null = null;
 	private previewEl: HTMLElement | null = null;
+	private penPreviewEl: SVGSVGElement | null = null;
+	private penPreviewPath: SVGPathElement | null = null;
 
 	private elements = new Map<string, HTMLElement[]>();
+	private penElements = new Map<string, PenElements>();
 	private handleEls: HTMLElement[] = [];
 	private selectedId: string | null = null;
 	private drag: Drag | null = null;
@@ -119,11 +134,19 @@ export class OcclusionLayer {
 		const preview = layer.createDiv({ cls: "occ-preview" });
 		preview.setCssStyles({ display: "none" });
 		this.previewEl = preview;
+		const penPreview = this.anchor.ownerDocument.createElementNS(SVG_NS, "svg");
+		penPreview.classList.add("occ-pen-preview");
+		penPreview.style.display = "none";
+		const penPreviewPath = this.anchor.ownerDocument.createElementNS(SVG_NS, "path");
+		penPreview.appendChild(penPreviewPath);
+		layer.appendChild(penPreview);
+		this.penPreviewEl = penPreview;
+		this.penPreviewPath = penPreviewPath;
 
 		capture.addEventListener("pointerdown", this.onPointerDown);
 		capture.addEventListener("pointermove", this.onPointerMove);
 		capture.addEventListener("pointerup", this.onPointerUp);
-		capture.addEventListener("pointercancel", this.onPointerUp);
+		capture.addEventListener("pointercancel", this.onPointerCancel);
 		capture.addEventListener("contextmenu", this.onContextMenu);
 		capture.addEventListener("dblclick", this.onDoubleClick);
 		this.anchor.addEventListener("pointerup", this.onTextSelection);
@@ -147,10 +170,13 @@ export class OcclusionLayer {
 		this.captureEl?.remove();
 		this.layerEl?.remove();
 		this.elements.clear();
+		this.penElements.clear();
 		this.handleEls = [];
 		this.layerEl = null;
 		this.captureEl = null;
 		this.previewEl = null;
+		this.penPreviewEl = null;
+		this.penPreviewPath = null;
 	}
 
 	destroy(): void {
@@ -202,11 +228,19 @@ export class OcclusionLayer {
 		return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 	}
 
-	private coverAt(point: { x: number; y: number }, includeText = true): Cover | null {
+	private coverAt(
+		point: { x: number; y: number },
+		includeText = true,
+		includePen = true
+	): Cover | null {
 		const covers = this.covers();
 		for (let i = covers.length - 1; i >= 0; i -= 1) {
 			const cover = covers[i];
 			if (!includeText && isTextCover(cover)) continue;
+			if (isPenCover(cover)) {
+				if (includePen && this.penContains(cover, point)) return cover;
+				continue;
+			}
 			for (const r of this.rectsFor(cover)) {
 				if (
 					point.x >= r.x &&
@@ -223,7 +257,7 @@ export class OcclusionLayer {
 
 	private handleAt(point: { x: number; y: number }): HandleRole | null {
 		const cover = this.covers().find((c) => c.id === this.selectedId);
-		if (!cover || isTextCover(cover)) return null;
+		if (!cover || !isRectangleCover(cover)) return null;
 		const r = this.toPixels(cover);
 		for (const role of HANDLE_ROLES) {
 			const [hx, hy] = handleAnchor(role, r.x, r.y, r.w, r.h);
@@ -245,7 +279,8 @@ export class OcclusionLayer {
 	}
 
 	private rectsFor(cover: Cover): PixelRect[] {
-		if (!isTextCover(cover)) return [this.toPixels(cover)];
+		if (isRectangleCover(cover)) return [this.toPixels(cover)];
+		if (isPenCover(cover)) return [penBounds(this.penPoints(cover), cover.width)];
 		const range = this.findTextRange(cover);
 		if (!range || !this.anchor) return [];
 		const anchorRect = this.anchor.getBoundingClientRect();
@@ -257,6 +292,21 @@ export class OcclusionLayer {
 				w: rect.width,
 				h: rect.height,
 			}));
+	}
+
+	private penPoints(cover: PenCover): Array<{ x: number; y: number }> {
+		const width = this.anchorWidth();
+		return cover.points.map((point) => ({ x: point.x * width, y: point.y }));
+	}
+
+	private penContains(cover: PenCover, point: { x: number; y: number }): boolean {
+		const points = this.penPoints(cover);
+		const radius = Math.max(4, cover.width / 2);
+		if (points.length === 1) return distance(points[0], point) <= radius;
+		for (let i = 1; i < points.length; i += 1) {
+			if (distanceToSegment(point, points[i - 1], points[i]) <= radius) return true;
+		}
+		return false;
 	}
 
 	private findTextRange(cover: TextCover): Range | null {
@@ -281,12 +331,15 @@ export class OcclusionLayer {
 			}
 		}
 		if (best < 0) return null;
-		const start = textPosition(nodes, best);
-		const end = textPosition(nodes, best + cover.exact.length);
+		const start = textPosition(nodes, best, "start");
+		const end = textPosition(nodes, best + cover.exact.length, "end");
 		if (!start || !end) return null;
 		const range = this.anchor.ownerDocument.createRange();
 		range.setStart(start.node, start.offset);
 		range.setEnd(end.node, end.offset);
+		// DOM boundaries between blocks can add content that textContent omits.
+		// Never paint a range broader than the quote this cover represents.
+		if (range.toString() !== cover.exact) return null;
 		return range;
 	}
 
@@ -348,12 +401,14 @@ export class OcclusionLayer {
 		const covers = this.covers();
 
 		if (this.captureEl) {
-			const active = mode === "draw" || mode === "delete";
+			const active = mode === "draw" || mode === "pen" || mode === "delete";
 			this.captureEl.setCssStyles({ display: active ? "block" : "none" });
 			this.captureEl.classList.toggle("occ-cursor-delete", mode === "delete");
+			this.captureEl.classList.toggle("occ-cursor-pen", mode === "pen");
 		}
 		this.anchor.classList.toggle("occ-text-mode", mode === "text");
 		this.layerEl.classList.toggle("occ-mode-draw", mode === "draw");
+		this.layerEl.classList.toggle("occ-mode-pen", mode === "pen");
 		this.layerEl.classList.toggle("occ-mode-text", mode === "text");
 		this.layerEl.classList.toggle("occ-mode-delete", mode === "delete");
 		this.layerEl.classList.toggle("occ-mode-reveal", mode === "reveal");
@@ -362,6 +417,12 @@ export class OcclusionLayer {
 		const seen = new Set<string>();
 		for (const cover of covers) {
 			seen.add(cover.id);
+			if (isPenCover(cover)) {
+				this.coverElements(cover.id, 0);
+				this.renderPen(cover, offset, mode, settings);
+				continue;
+			}
+			this.removePen(cover.id);
 			const rects = this.rectsFor(cover);
 			const els = this.coverElements(cover.id, rects.length);
 			els.forEach((el, index) => {
@@ -380,6 +441,7 @@ export class OcclusionLayer {
 				el.classList.toggle("occ-revealed", !cover.covered);
 				el.classList.toggle("occ-marked", !cover.covered && settings.markRevealed);
 				el.classList.toggle("occ-selected", mode === "draw" && cover.id === this.selectedId);
+				this.layerEl?.appendChild(el);
 			});
 		}
 
@@ -389,9 +451,71 @@ export class OcclusionLayer {
 				this.elements.delete(id);
 			}
 		}
+		for (const [id] of this.penElements) {
+			if (!seen.has(id)) this.removePen(id);
+		}
 		if (this.selectedId && !seen.has(this.selectedId)) this.selectedId = null;
 
 		this.renderHandles(offset);
+	}
+
+	private renderPen(
+		cover: PenCover,
+		offset: { left: number; top: number },
+		mode: Mode,
+		settings: OcclusionSettings
+	): void {
+		if (!this.layerEl || !this.anchor) return;
+		let elements = this.penElements.get(cover.id);
+		if (!elements) {
+			const svg = this.anchor.ownerDocument.createElementNS(SVG_NS, "svg");
+			svg.classList.add("occ-pen-cover");
+			const path = this.anchor.ownerDocument.createElementNS(SVG_NS, "path");
+			path.setAttribute("fill", "none");
+			path.setAttribute("stroke-linecap", "round");
+			path.setAttribute("stroke-linejoin", "round");
+			path.addEventListener("click", (event) => {
+				if (this.ctx.getMode() !== "reveal") return;
+				event.preventDefault();
+				event.stopPropagation();
+				this.toggle(cover.id);
+			});
+			path.addEventListener("contextmenu", (event) => {
+				if (this.ctx.getMode() === "pass") return;
+				event.preventDefault();
+				event.stopPropagation();
+				this.openMenu(event, cover.id);
+			});
+			svg.appendChild(path);
+			this.layerEl.appendChild(svg);
+			elements = { svg, path };
+			this.penElements.set(cover.id, elements);
+		}
+
+		const points = this.penPoints(cover);
+		const bounds = penBounds(points, cover.width);
+		const local = points.map((point) => ({ x: point.x - bounds.x, y: point.y - bounds.y }));
+		const { svg, path } = elements;
+		svg.style.left = `${offset.left + bounds.x}px`;
+		svg.style.top = `${offset.top + bounds.y}px`;
+		svg.setAttribute("width", String(Math.max(1, bounds.w)));
+		svg.setAttribute("height", String(Math.max(1, bounds.h)));
+		svg.setAttribute("viewBox", `0 0 ${Math.max(1, bounds.w)} ${Math.max(1, bounds.h)}`);
+		path.setAttribute("d", penPath(local));
+		path.setAttribute("stroke-width", String(cover.width));
+		path.setAttribute("stroke", cover.covered || settings.markRevealed ? cover.color : "transparent");
+		path.setAttribute(
+			"opacity",
+			cover.covered ? String(settings.coverOpacity) : settings.markRevealed ? "0.45" : "1"
+		);
+		path.setAttribute("stroke-dasharray", !cover.covered && settings.markRevealed ? "4 4" : "none");
+		path.style.pointerEvents = mode === "reveal" ? "stroke" : "none";
+		this.layerEl.appendChild(svg);
+	}
+
+	private removePen(id: string): void {
+		this.penElements.get(id)?.svg.remove();
+		this.penElements.delete(id);
 	}
 
 	private coverElements(id: string, count: number): HTMLElement[] {
@@ -424,7 +548,7 @@ export class OcclusionLayer {
 				? this.covers().find((c) => c.id === this.selectedId) ?? null
 				: null;
 
-		if (!wanted || isTextCover(wanted)) {
+		if (!wanted || !isRectangleCover(wanted)) {
 			this.handleEls.forEach((el) => el.remove());
 			this.handleEls = [];
 			return;
@@ -465,6 +589,20 @@ export class OcclusionLayer {
 		});
 	}
 
+	private showPenPreview(points: Array<{ x: number; y: number }> | null): void {
+		if (!this.penPreviewEl || !this.penPreviewPath) return;
+		if (!points || points.length === 0) {
+			this.penPreviewEl.style.display = "none";
+			return;
+		}
+		const offset = this.contentOffset();
+		const shifted = points.map((point) => ({ x: point.x + offset.left, y: point.y + offset.top }));
+		this.penPreviewEl.style.display = "block";
+		this.penPreviewPath.setAttribute("d", penPath(shifted));
+		this.penPreviewPath.setAttribute("stroke", this.ctx.getColor());
+		this.penPreviewPath.setAttribute("stroke-width", String(this.ctx.getPenWidth()));
+	}
+
 	private onTextSelection = (event: PointerEvent): void => {
 		if (event.button !== 0 || this.ctx.getMode() !== "text" || !this.anchor) return;
 		const selection = this.anchor.ownerDocument.getSelection();
@@ -494,21 +632,29 @@ export class OcclusionLayer {
 	};
 
 	private onPointerDown = (event: PointerEvent): void => {
-		if (event.button !== 0 || this.ctx.getMode() !== "draw") return;
+		const mode = this.ctx.getMode();
+		if (event.button !== 0 || (mode !== "draw" && mode !== "pen")) return;
 		const point = this.pointAt(event);
 		this.captureEl?.setPointerCapture(event.pointerId);
+		if (mode === "pen") {
+			this.selectedId = null;
+			this.dragOrigin = null;
+			this.drag = { kind: "pen", points: [point] };
+			this.showPenPreview([point]);
+			return;
+		}
 
 		this.dragOrigin = this.covers().map((c) => ({ ...c }));
 		const role = this.handleAt(point);
 		if (role && this.selectedId) {
 			const cover = this.covers().find((c) => c.id === this.selectedId);
-			if (cover && !isTextCover(cover)) {
+			if (cover && isRectangleCover(cover)) {
 				this.drag = { kind: "resize", id: cover.id, role, from: point, orig: this.toPixels(cover) };
 				return;
 			}
 		}
-		const hit = this.coverAt(point, false);
-		if (hit && !isTextCover(hit)) {
+		const hit = this.coverAt(point, false, false);
+		if (hit && isRectangleCover(hit)) {
 			this.selectedId = hit.id;
 			this.drag = { kind: "move", id: hit.id, from: point, orig: this.toPixels(hit) };
 			this.render();
@@ -527,7 +673,7 @@ export class OcclusionLayer {
 				this.captureEl.setCssStyles({
 					cursor: role
 						? HANDLE_CURSORS[role]
-						: this.coverAt(point, false)
+						: this.coverAt(point, false, false)
 						? "move"
 						: "crosshair",
 				});
@@ -535,6 +681,12 @@ export class OcclusionLayer {
 			return;
 		}
 		const point = this.pointAt(event);
+		if (this.drag.kind === "pen") {
+			const last = this.drag.points[this.drag.points.length - 1];
+			if (distance(last, point) >= 1.5) this.drag.points.push(point);
+			this.showPenPreview(this.drag.points);
+			return;
+		}
 		if (this.drag.kind === "new") {
 			this.drag.to = point;
 			this.showPreview(normalise(this.drag.from, point));
@@ -556,8 +708,24 @@ export class OcclusionLayer {
 		const drag = this.drag;
 		this.drag = null;
 		this.showPreview(null);
+		this.showPenPreview(null);
 		if (!drag) return;
 		const point = this.pointAt(event);
+		if (drag.kind === "pen") {
+			const last = drag.points[drag.points.length - 1];
+			if (distance(last, point) >= 1.5) drag.points.push(point);
+			const width = this.anchorWidth();
+			const cover: PenCover = {
+				id: randomId(),
+				kind: "pen",
+				points: drag.points.map((sample) => ({ x: sample.x / width, y: sample.y })),
+				width: this.ctx.getPenWidth(),
+				color: this.ctx.getColor(),
+				covered: true,
+			};
+			this.commit([...this.covers(), cover]);
+			return;
+		}
 
 		if (drag.kind === "new") {
 			const rect = normalise(drag.from, point);
@@ -587,11 +755,13 @@ export class OcclusionLayer {
 		this.render();
 	};
 
+	private onPointerCancel = (): void => this.cancelDrag();
+
 	/** True when a move or resize actually changed the cover. */
 	private movedFrom(drag: Drag): boolean {
-		if (drag.kind === "new") return false;
+		if (drag.kind === "new" || drag.kind === "pen") return false;
 		const current = this.covers().find((c) => c.id === drag.id);
-		if (!current || isTextCover(current)) return false;
+		if (!current || !isRectangleCover(current)) return false;
 		const now = this.toPixels(current);
 		const o = drag.orig;
 		return (
@@ -604,7 +774,7 @@ export class OcclusionLayer {
 
 	private onDoubleClick = (event: MouseEvent): void => {
 		if (this.ctx.getMode() !== "draw") return;
-		const hit = this.coverAt(this.pointAt(event), false);
+		const hit = this.coverAt(this.pointAt(event), false, false);
 		if (hit) {
 			event.preventDefault();
 			this.toggle(hit.id);
@@ -619,8 +789,8 @@ export class OcclusionLayer {
 			if (hit) this.deleteCover(hit.id);
 			return;
 		}
-		if (mode !== "draw") return;
-		const hit = this.coverAt(this.pointAt(event), false);
+		if (mode !== "draw" && mode !== "pen") return;
+		const hit = this.coverAt(this.pointAt(event), false, mode === "pen");
 		event.preventDefault();
 		if (hit) this.openMenu(event, hit.id);
 	};
@@ -670,12 +840,13 @@ export class OcclusionLayer {
 
 	cancelDrag(): void {
 		if (!this.drag) return;
-		if (this.drag.kind !== "new") {
+		if (this.drag.kind === "move" || this.drag.kind === "resize") {
 			this.replace(this.drag.id, this.fromPixels(this.drag.orig), false);
 		}
 		this.drag = null;
 		this.dragOrigin = null;
 		this.showPreview(null);
+		this.showPenPreview(null);
 		this.render();
 	}
 }
@@ -689,10 +860,63 @@ function normalise(a: { x: number; y: number }, b: { x: number; y: number }): Pi
 	};
 }
 
-function textPosition(nodes: Text[], index: number): { node: Text; offset: number } | null {
+function penBounds(points: Array<{ x: number; y: number }>, width: number): PixelRect {
+	const pad = width / 2 + 1;
+	const xs = points.map((point) => point.x);
+	const ys = points.map((point) => point.y);
+	const left = Math.min(...xs) - pad;
+	const top = Math.min(...ys) - pad;
+	return {
+		x: left,
+		y: top,
+		w: Math.max(1, Math.max(...xs) + pad - left),
+		h: Math.max(1, Math.max(...ys) + pad - top),
+	};
+}
+
+function penPath(points: Array<{ x: number; y: number }>): string {
+	if (points.length === 0) return "";
+	if (points.length === 1) return `M ${points[0].x} ${points[0].y} l 0.01 0`;
+	return points
+		.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+		.join(" ");
+}
+
+function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+	return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function distanceToSegment(
+	point: { x: number; y: number },
+	start: { x: number; y: number },
+	end: { x: number; y: number }
+): number {
+	const dx = end.x - start.x;
+	const dy = end.y - start.y;
+	if (dx === 0 && dy === 0) return distance(point, start);
+	const t = Math.max(
+		0,
+		Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy))
+	);
+	return distance(point, { x: start.x + t * dx, y: start.y + t * dy });
+}
+
+function textPosition(
+	nodes: Text[],
+	index: number,
+	affinity: "start" | "end"
+): { node: Text; offset: number } | null {
 	let remaining = index;
-	for (const node of nodes) {
-		if (remaining <= node.data.length) return { node, offset: remaining };
+	for (let i = 0; i < nodes.length; i += 1) {
+		const node = nodes[i];
+		if (remaining < node.data.length) return { node, offset: remaining };
+		if (remaining === node.data.length) {
+			if (affinity === "start" && i + 1 < nodes.length) {
+				const next = nodes.slice(i + 1).find((candidate) => candidate.data.length > 0);
+				if (next) return { node: next, offset: 0 };
+			}
+			return { node, offset: remaining };
+		}
 		remaining -= node.data.length;
 	}
 	return null;

@@ -1,6 +1,7 @@
-export type Mode = "draw" | "text" | "delete" | "reveal" | "pass";
+export type Mode = "draw" | "pen" | "text" | "delete" | "reveal" | "pass";
 
 export const MODE_DRAW: Mode = "draw";
+export const MODE_PEN: Mode = "pen";
 export const MODE_TEXT: Mode = "text";
 export const MODE_DELETE: Mode = "delete";
 export const MODE_REVEAL: Mode = "reveal";
@@ -36,10 +37,29 @@ export interface TextCover extends CoverBase {
 	suffix: string;
 }
 
-export type Cover = RectangleCover | TextCover;
+export interface PenPoint {
+	x: number;
+	y: number;
+}
+
+export interface PenCover extends CoverBase {
+	kind: "pen";
+	points: PenPoint[];
+	width: number;
+}
+
+export type Cover = RectangleCover | TextCover | PenCover;
 
 export function isTextCover(cover: Cover): cover is TextCover {
 	return cover.kind === "text";
+}
+
+export function isPenCover(cover: Cover): cover is PenCover {
+	return cover.kind === "pen";
+}
+
+export function isRectangleCover(cover: Cover): cover is RectangleCover {
+	return cover.kind === undefined || cover.kind === "rectangle";
 }
 
 export interface OcclusionSettings {
@@ -48,6 +68,7 @@ export interface OcclusionSettings {
 	showToolbarOnStart: boolean;
 	markRevealed: boolean;
 	coverOpacity: number;
+	penWidth: number;
 	swatches: string[];
 }
 
@@ -57,6 +78,7 @@ export const DEFAULT_SETTINGS: OcclusionSettings = {
 	showToolbarOnStart: false,
 	markRevealed: true,
 	coverOpacity: 1,
+	penWidth: 24,
 	swatches: ["#ffffff", "#1e1e1e", "#ffd166", "#06d6a0", "#ef476f", "#4f9be0"],
 };
 

@@ -1,5 +1,5 @@
 import { Plugin, TAbstractFile, TFile, debounce } from "obsidian";
-import { Cover, DEFAULT_SETTINGS, OcclusionData, OcclusionSettings } from "./types";
+import { Cover, DEFAULT_SETTINGS, OcclusionData, OcclusionSettings, isPenCover } from "./types";
 
 const MAX_UNDO = 50;
 
@@ -161,7 +161,9 @@ export class OcclusionStore {
 }
 
 function clone(covers: Cover[]): Cover[] {
-	return covers.map((c) => ({ ...c }));
+	return covers.map((c) =>
+		isPenCover(c) ? { ...c, points: c.points.map((point) => ({ ...point })) } : { ...c }
+	);
 }
 
 function isCover(value: unknown): value is Cover {
@@ -178,6 +180,25 @@ function isCover(value: unknown): value is Cover {
 			c.exact.length > 0 &&
 			typeof c.prefix === "string" &&
 			typeof c.suffix === "string"
+		);
+	}
+	if (c.kind === "pen") {
+		return (
+			typeof c.width === "number" &&
+			Number.isFinite(c.width) &&
+			c.width > 0 &&
+			Array.isArray(c.points) &&
+			c.points.length > 0 &&
+			c.points.every((point) => {
+				if (!point || typeof point !== "object") return false;
+				const p = point as Record<string, unknown>;
+				return (
+					typeof p.x === "number" &&
+					Number.isFinite(p.x) &&
+					typeof p.y === "number" &&
+					Number.isFinite(p.y)
+				);
+			})
 		);
 	}
 	return (

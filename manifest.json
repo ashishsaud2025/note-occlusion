@@ -1,9 +1,9 @@
 {
   "id": "note-occlusion",
   "name": "Note Occlusion",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minAppVersion": "1.13.0",
-  "description": "Draw covers or hide selected text, then click to reveal. Text covers follow words between reading and editing modes.",
+  "description": "Draw covers, paint freehand strokes, or hide selected text, then click to reveal.",
   "author": "Star",
   "isDesktopOnly": false
 }

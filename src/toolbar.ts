@@ -1,11 +1,13 @@
 import { setIcon } from "obsidian";
-import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_REVEAL, MODE_TEXT, Mode } from "./types";
+import { MODE_DELETE, MODE_DRAW, MODE_PASS, MODE_PEN, MODE_REVEAL, MODE_TEXT, Mode } from "./types";
 
 export interface ToolbarHooks {
 	getMode(): Mode;
 	setMode(mode: Mode): void;
 	getColor(): string;
 	setColor(color: string): void;
+	getPenWidth(): number;
+	setPenWidth(width: number): void;
 	getSwatches(): string[];
 	status(): { count: number; covered: number; note: string | null };
 	undo(): void;
@@ -22,6 +24,7 @@ export class OcclusionToolbar {
 	private statusEl!: HTMLElement;
 	private modeButtons = new Map<Mode, HTMLElement>();
 	private colorInput!: HTMLInputElement;
+	private penWidthInput!: HTMLInputElement;
 	private hooks: ToolbarHooks;
 	private offset = { x: 0, y: 0 };
 	private dragging = false;
@@ -48,6 +51,7 @@ export class OcclusionToolbar {
 		const modes = this.root.createDiv({ cls: "occ-row occ-modes" });
 		const modeSpec: Array<[Mode, string, string, string]> = [
 			[MODE_DRAW, "Draw", "pencil", "Drag on the note to paint a cover"],
+			[MODE_PEN, "Pen", "paintbrush", "Drag to paint a freehand cover"],
 			[MODE_TEXT, "Text", "text-select", "Select text in the note to hide it"],
 			[MODE_DELETE, "Delete", "trash-2", "Right-click a cover to remove it"],
 			[MODE_REVEAL, "Reveal", "eye", "Click a cover to show what is under it"],
@@ -81,6 +85,17 @@ export class OcclusionToolbar {
 			});
 		}
 
+		const penSize = this.root.createDiv({ cls: "occ-row occ-pen-size" });
+		penSize.createSpan({ text: "Pen width" });
+		this.penWidthInput = penSize.createEl("input", { type: "range" });
+		this.penWidthInput.min = "4";
+		this.penWidthInput.max = "80";
+		this.penWidthInput.step = "2";
+		this.penWidthInput.value = String(this.hooks.getPenWidth());
+		this.penWidthInput.addEventListener("input", () => {
+			this.hooks.setPenWidth(Number(this.penWidthInput.value));
+		});
+
 		const actions = this.root.createDiv({ cls: "occ-row" });
 		const actionSpec: Array<[string, string, () => void]> = [
 			["Undo", "undo-2", () => this.hooks.undo()],
@@ -109,7 +124,7 @@ export class OcclusionToolbar {
 			cls: "occ-hint",
 			text:
 				"Draw: drag to paint, drag a cover to move it, grips to resize. " +
-				"Text: select words to create a cover that follows the text. " +
+				"Pen: drag to paint a freehand cover. Text: select words to create a cover that follows the text. " +
 				"Right-click for colour and delete. Delete: right-click a cover to " +
 				"remove it immediately. Reveal: click a cover.",
 		});
@@ -149,6 +164,7 @@ export class OcclusionToolbar {
 		}
 		const { count, covered, note } = this.hooks.status();
 		this.colorInput.value = this.hooks.getColor();
+		this.penWidthInput.value = String(this.hooks.getPenWidth());
 		this.statusEl.empty();
 		if (!note) {
 			this.statusEl.setText("Open a note to add covers.");

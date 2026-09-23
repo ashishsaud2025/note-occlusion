@@ -7,6 +7,7 @@ import {
 	Cover,
 	MODE_DELETE,
 	MODE_DRAW,
+	MODE_PEN,
 	MODE_PASS,
 	MODE_REVEAL,
 	MODE_TEXT,
@@ -17,6 +18,7 @@ export default class NoteOcclusionPlugin extends Plugin {
 	store!: OcclusionStore;
 	private mode: Mode = MODE_REVEAL;
 	private color = "#ffffff";
+	private penWidth = 24;
 	private layers = new Map<MarkdownView, OcclusionLayer>();
 	private toolbar: OcclusionToolbar | null = null;
 	private statusEl: HTMLElement | null = null;
@@ -26,6 +28,7 @@ export default class NoteOcclusionPlugin extends Plugin {
 		await this.store.load();
 		this.mode = this.store.settings.startMode;
 		this.color = this.store.settings.defaultColor;
+		this.penWidth = this.store.settings.penWidth;
 
 		this.addSettingTab(new OcclusionSettingsTab(this.app, this));
 		this.statusEl = this.addStatusBarItem();
@@ -49,7 +52,13 @@ export default class NoteOcclusionPlugin extends Plugin {
 		);
 		this.registerDomEvent(document, "keydown", (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
-			if (this.mode !== MODE_DRAW && this.mode !== MODE_TEXT && this.mode !== MODE_DELETE) return;
+			if (
+				this.mode !== MODE_DRAW &&
+				this.mode !== MODE_PEN &&
+				this.mode !== MODE_TEXT &&
+				this.mode !== MODE_DELETE
+			)
+				return;
 			const layer = this.activeLayer();
 			layer?.cancelDrag();
 			this.setMode(MODE_REVEAL);
@@ -82,6 +91,7 @@ export default class NoteOcclusionPlugin extends Plugin {
 		});
 		const modes: Array<[Mode, string]> = [
 			[MODE_DRAW, "Draw mode: paint covers"],
+			[MODE_PEN, "Pen mode: paint freehand covers"],
 			[MODE_TEXT, "Text mode: select text to hide it"],
 			[MODE_DELETE, "Delete mode: right-click a cover to remove it"],
 			[MODE_REVEAL, "Reveal mode: click covers"],
@@ -149,6 +159,7 @@ export default class NoteOcclusionPlugin extends Plugin {
 		return {
 			getMode: () => this.mode,
 			getColor: () => this.color,
+			getPenWidth: () => this.penWidth,
 			getSettings: () => this.store.settings,
 			getCovers: (path: string) => this.store.covers(path),
 			setCovers: (path: string, covers: Cover[], remember = true) =>
@@ -209,13 +220,18 @@ export default class NoteOcclusionPlugin extends Plugin {
 	}
 
 	cycleMode(): void {
-		const order: Mode[] = [MODE_REVEAL, MODE_DRAW, MODE_TEXT, MODE_DELETE, MODE_PASS];
+		const order: Mode[] = [MODE_REVEAL, MODE_DRAW, MODE_PEN, MODE_TEXT, MODE_DELETE, MODE_PASS];
 		const next = order[(order.indexOf(this.mode) + 1) % order.length];
 		this.setMode(next);
 	}
 
 	setColor(color: string): void {
 		this.color = color;
+		this.refreshChrome();
+	}
+
+	setPenWidth(width: number): void {
+		this.penWidth = width;
 		this.refreshChrome();
 	}
 
@@ -247,6 +263,8 @@ export default class NoteOcclusionPlugin extends Plugin {
 			setMode: (mode) => this.setMode(mode),
 			getColor: () => this.color,
 			setColor: (color) => this.setColor(color),
+			getPenWidth: () => this.penWidth,
+			setPenWidth: (width) => this.setPenWidth(width),
 			getSwatches: () => this.store.settings.swatches,
 			status: () => {
 				const path = this.activePath();
