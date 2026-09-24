@@ -138,19 +138,29 @@
   margin-bottom: 6px;
 }
 
-.occ-pen-cover,
+.occ-pen-cover {
+  position: absolute;
+  pointer-events: none;
+}
+
+.occ-pen-cover svg {
+  display: block;
+  overflow: visible;
+}
+
 .occ-pen-preview {
   position: absolute;
   overflow: visible;
   pointer-events: none;
-}
-
-.occ-pen-preview {
   top: 0;
   left: 0;
   width: 1px;
   height: 1px;
   opacity: 0.65;
+}
+
+.occ-pen-preview.occ-hidden {
+  display: none;
 }
 
 .occ-pen-preview path {

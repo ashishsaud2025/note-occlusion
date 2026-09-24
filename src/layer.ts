@@ -45,6 +45,7 @@ interface PixelRect {
 }
 
 interface PenElements {
+	wrap: HTMLDivElement;
 	svg: SVGSVGElement;
 	path: SVGPathElement;
 }
@@ -140,8 +141,7 @@ export class OcclusionLayer {
 		preview.setCssStyles({ display: "none" });
 		this.previewEl = preview;
 		const penPreview = this.anchor.ownerDocument.createElementNS(SVG_NS, "svg");
-		penPreview.classList.add("occ-pen-preview");
-		penPreview.style.display = "none";
+		penPreview.classList.add("occ-pen-preview", "occ-hidden");
 		const penPreviewPath = this.anchor.ownerDocument.createElementNS(SVG_NS, "path");
 		penPreview.appendChild(penPreviewPath);
 		layer.appendChild(penPreview);
@@ -522,8 +522,10 @@ export class OcclusionLayer {
 		if (!this.layerEl || !this.anchor) return;
 		let elements = this.penElements.get(cover.id);
 		if (!elements) {
+			// Dynamic placement lives on an HTML wrapper (setCssStyles) so
+			// the SVG itself stays purely attribute-driven.
+			const wrap = this.layerEl.createDiv({ cls: "occ-pen-cover" });
 			const svg = this.anchor.ownerDocument.createElementNS(SVG_NS, "svg");
-			svg.classList.add("occ-pen-cover");
 			const path = this.anchor.ownerDocument.createElementNS(SVG_NS, "path");
 			path.setAttribute("fill", "none");
 			path.setAttribute("stroke-linecap", "round");
@@ -541,17 +543,20 @@ export class OcclusionLayer {
 				this.openMenu(event, cover.id);
 			});
 			svg.appendChild(path);
-			this.layerEl.appendChild(svg);
-			elements = { svg, path };
+			wrap.appendChild(svg);
+			this.layerEl.appendChild(wrap);
+			elements = { wrap, svg, path };
 			this.penElements.set(cover.id, elements);
 		}
 
 		const points = this.penPoints(cover);
 		const bounds = penBounds(points, cover.width);
 		const local = points.map((point) => ({ x: point.x - bounds.x, y: point.y - bounds.y }));
-		const { svg, path } = elements;
-		svg.style.left = `${offset.left + bounds.x}px`;
-		svg.style.top = `${offset.top + bounds.y}px`;
+		const { wrap, svg, path } = elements;
+		wrap.setCssStyles({
+			left: `${offset.left + bounds.x}px`,
+			top: `${offset.top + bounds.y}px`,
+		});
 		svg.setAttribute("width", String(Math.max(1, bounds.w)));
 		svg.setAttribute("height", String(Math.max(1, bounds.h)));
 		svg.setAttribute("viewBox", `0 0 ${Math.max(1, bounds.w)} ${Math.max(1, bounds.h)}`);
@@ -563,12 +568,12 @@ export class OcclusionLayer {
 			cover.covered ? String(settings.coverOpacity) : settings.markRevealed ? "0.45" : "1"
 		);
 		path.setAttribute("stroke-dasharray", !cover.covered && settings.markRevealed ? "4 4" : "none");
-		path.style.pointerEvents = mode === "reveal" ? "stroke" : "none";
-		this.layerEl.appendChild(svg);
+		path.setAttribute("pointer-events", mode === "reveal" ? "stroke" : "none");
+		this.layerEl.appendChild(wrap);
 	}
 
 	private removePen(id: string): void {
-		this.penElements.get(id)?.svg.remove();
+		this.penElements.get(id)?.wrap.remove();
 		this.penElements.delete(id);
 	}
 
@@ -646,12 +651,12 @@ export class OcclusionLayer {
 	private showPenPreview(points: Array<{ x: number; y: number }> | null): void {
 		if (!this.penPreviewEl || !this.penPreviewPath) return;
 		if (!points || points.length === 0) {
-			this.penPreviewEl.style.display = "none";
+			this.penPreviewEl.classList.add("occ-hidden");
 			return;
 		}
 		const offset = this.contentOffset();
 		const shifted = points.map((point) => ({ x: point.x + offset.left, y: point.y + offset.top }));
-		this.penPreviewEl.style.display = "block";
+		this.penPreviewEl.classList.remove("occ-hidden");
 		this.penPreviewPath.setAttribute("d", penPath(shifted));
 		this.penPreviewPath.setAttribute("stroke", this.ctx.getColor());
 		this.penPreviewPath.setAttribute("stroke-width", String(this.ctx.getPenWidth()));
