@@ -154,6 +154,7 @@ export class OcclusionLayer {
 		capture.addEventListener("pointercancel", this.onPointerCancel);
 		capture.addEventListener("contextmenu", this.onContextMenu);
 		capture.addEventListener("dblclick", this.onDoubleClick);
+		capture.addEventListener("wheel", this.onWheel, { passive: false });
 		this.anchor.addEventListener("pointerup", this.onTextSelection);
 
 		this.observer?.observe(this.anchor);
@@ -459,6 +460,13 @@ export class OcclusionLayer {
 			this.captureEl.setCssStyles({ display: active ? "block" : "none" });
 			this.captureEl.classList.toggle("occ-cursor-delete", mode === "delete");
 			this.captureEl.classList.toggle("occ-cursor-pen", mode === "pen");
+			// Keep the native scrollbars reachable: the capture surface would
+			// otherwise sit above them and swallow scrollbar drags.
+			const gutterRight =
+				active && this.host ? Math.max(0, this.host.offsetWidth - this.host.clientWidth) : 0;
+			const gutterBottom =
+				active && this.host ? Math.max(0, this.host.offsetHeight - this.host.clientHeight) : 0;
+			this.captureEl.setCssStyles({ right: `${gutterRight}px`, bottom: `${gutterBottom}px` });
 		}
 		this.anchor.classList.toggle("occ-text-mode", mode === "text");
 		this.layerEl.classList.toggle("occ-mode-draw", mode === "draw");
@@ -814,6 +822,32 @@ export class OcclusionLayer {
 	};
 
 	private onPointerCancel = (): void => this.cancelDrag();
+
+	/**
+	 * The capture surface sits above the note's scroller in draw, pen, and
+	 * delete modes, so wheel input would otherwise bubble past the scroller
+	 * and scroll nothing. Forward it so the note stays scrollable while
+	 * drawing. This also works mid-drag: coordinates are re-measured
+	 * against the content on every pointer event.
+	 */
+	private onWheel = (event: WheelEvent): void => {
+		const mode = this.ctx.getMode();
+		if (!this.host || (mode !== "draw" && mode !== "pen" && mode !== "delete")) return;
+		if (event.ctrlKey || event.metaKey) return;
+		let deltaX = event.deltaX;
+		let deltaY = event.deltaY;
+		if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+			deltaX *= 16;
+			deltaY *= 16;
+		} else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+			deltaX *= this.host.clientWidth;
+			deltaY *= this.host.clientHeight;
+		}
+		if (deltaX === 0 && deltaY === 0) return;
+		event.preventDefault();
+		this.host.scrollTop += deltaY;
+		this.host.scrollLeft += deltaX;
+	};
 
 	/** True when a move or resize actually changed the cover. */
 	private movedFrom(drag: Drag): boolean {

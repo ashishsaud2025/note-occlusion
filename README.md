@@ -29,7 +29,7 @@ if it does not appear straight away.
 
 | Mode | What the mouse does |
 |---|---|
-| **Draw** | Drag on the note to paint a cover. Drag a cover to move it, drag a grip to resize, right-click for colour, bring-to-front, or delete. The note is not editable while this is on. |
+| **Draw** | Drag on the note to paint a cover. Drag a cover to move it, drag a grip to resize, right-click for colour, bring-to-front, or delete. The note is not editable while this is on, but the mouse wheel and scrollbar still scroll — even mid-drag. |
 | **Pen** | Drag to paint a freehand cover. Adjust the stroke width in the toolbar or settings. Each stroke can be revealed, recoloured, deleted, or undone as one cover. |
 | **Text** | Select text to hide it. These covers are anchored to the selected words and are recalculated when you switch between Reading and editing modes. |
 | **Delete** | Right-click a cover to remove it immediately, no menu. This is the same delete action available from Draw mode's right-click menu, just one click instead of two. The note is not editable while this is on. |
